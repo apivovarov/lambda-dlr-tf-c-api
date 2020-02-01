@@ -37,38 +37,44 @@ make -j$(nproc)
 make install
 ```
 
-2. Download `libtensorflow.so` v.1.15.0 built for aws lambda (`-march=ivybridge`)
+3. Download `libtensorflow.so` v.1.15.0 built for aws lambda (`-march=ivybridge`)
 
 ```
-mkdir ~/libtensorflow-lambda
+mkdir libtensorflow-lambda
 cd libtensorflow-lambda
 wget https://pivovaa-us-west-1.s3-us-west-1.amazonaws.com/libtensorflow-ivybridge.tar.gz
 tar zxf libtensorflow-ivybridge.tar.gz
 rm -rf libtensorflow-ivybridge.tar.gz
+export TF_LIB=$(pwd)
 ```
 
-3. Build DLR with Tensorflow support
+4. Build DLR with Tensorflow support
 
 ```
 git clone --recursive https://github.com/neo-ai/neo-ai-dlr
 cd neo-ai-dlr
 mkdir build && cd build
 cmake .. \
-  -DWITH_TENSORFLOW_LIB=~/libtensorflow-lambda \
+  -DWITH_TENSORFLOW_LIB=$TF_LIB \
   -DCMAKE_BUILD_TYPE=Release
 
 make -j$(nproc)
+export DLR_LIB=$(pwd)/lib
 ```
 
-3. Build this project (lambda-dlr-tf-c-api)
+5. Build this project (lambda-dlr-tf-c-api)
 
 ```
 git clone https://github.com/apivovarov/lambda-dlr-tf-c-api.git
 cd  lambda-dlr-tf-c-api
+
+# edit main.cpp to set correct location of you model of s3
+# check input output tensor names, shapes, etc
+
 mkdir lib && cd lib
-ln -s ../../neo-ai-dlr/build/lib/libdlr.so
-ln -s ../../libtensorflow-lambda/lib/libtensorflow_framework.so.1
-ln -s ../../libtensorflow-lambda/lib/libtensorflow.so.1
+ln -s $DLR_LIB/libdlr.so
+ln -s $TF_LIB/lib/libtensorflow_framework.so.1
+ln -s $TF_LIB/lib/libtensorflow.so.1
 cd ..
 
 mkdir build && cd build
@@ -81,7 +87,7 @@ make
 # it will produce lambda-dlr-tf binary
 ```
 
-5. Package and upload lambda package to s3
+6. Package and upload lambda package to s3
 
 ```
 # Assuming you are still in build folder
