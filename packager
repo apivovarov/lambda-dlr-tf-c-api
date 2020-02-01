@@ -1,0 +1,93 @@
+#!/bin/bash
+#  Copyright 2018-present Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License").
+#  You may not use this file except in compliance with the License.
+#  A copy of the License is located at
+#
+#   http://aws.amazon.com/apache2.0
+#
+#  or in the "license" file accompanying this file. This file is distributed
+#  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+#  express or implied. See the License for the specific language governing
+#  permissions and limitations under the License.
+
+set -euo pipefail
+
+print_help() {
+    echo -e "Usage: packager [OPTIONS] <binary name>\n"
+    echo -e "OPTIONS\n"
+}
+
+if [ $# -lt 1 ]; then
+    echo -e "Error: missing arguments\n"
+    print_help
+    exit 1
+fi
+
+POSITIONAL=()
+INCLUDE_LIBC=false
+while [[ $# -gt 0 ]]
+do
+    key="$1"
+    case $key in
+        *)    # unknown option
+            POSITIONAL+=("$1") # save it in an array for later
+            shift # past argument
+            ;;
+    esac
+done
+set -- "${POSITIONAL[@]}" # restore positional parameters
+
+PKG_BIN_PATH=$1
+
+if [ ! -f "$PKG_BIN_PATH" ]; then
+    echo "$PKG_BIN_PATH" - No such file.;
+    exit 1;
+fi
+
+if ! type zip > /dev/null 2>&1; then
+    echo "zip utility is not found. Please install it and re-run this script"
+    exit 1
+fi
+
+
+PKG_BIN_FILENAME=$(basename "$PKG_BIN_PATH")
+PKG_DIR=tmp_pkg
+rm -rf "$PKG_DIR"
+
+list=$(ldd "$PKG_BIN_PATH" | awk '{print $(NF-1)}' | grep -e 'libtensorflow\|libdlr')
+
+mkdir -p "$PKG_DIR/bin" "$PKG_DIR/lib"
+
+for i in $list
+do
+  echo $i
+    if [[ ! -f $i ]]; then # ignore linux-vdso.so.1
+        continue
+    fi
+
+    cp "$i" $PKG_DIR/lib
+done
+
+bootstrap_script_no_libc=$(cat <<EOF
+#!/bin/bash
+set -euo pipefail
+export AWS_EXECUTION_ENV=lambda-cpp
+export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:\$LAMBDA_TASK_ROOT/lib
+exec \$LAMBDA_TASK_ROOT/bin/$PKG_BIN_FILENAME \${_HANDLER}
+EOF
+)
+
+cp "$PKG_BIN_PATH" "$PKG_DIR/bin"
+echo -e "$bootstrap_script_no_libc" > "$PKG_DIR/bootstrap"
+chmod +x "$PKG_DIR/bootstrap"
+# some shenanigans to create the right layout in the zip file without extraneous directories
+pushd "$PKG_DIR" > /dev/null
+zip --symlinks --recurse-paths "$PKG_BIN_FILENAME".zip -- *
+ORIGIN_DIR=$(dirs -l +1)
+mv "$PKG_BIN_FILENAME".zip "$ORIGIN_DIR"
+popd > /dev/null
+rm -rf "$PKG_DIR"
+echo Created "$ORIGIN_DIR/$PKG_BIN_FILENAME".zip
+
