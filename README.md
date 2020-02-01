@@ -109,8 +109,11 @@ aws s3 cp lambda-dlr-tf.zip s3://<your_bucket>/<folder>/
 
 # Create lambda.
 
+Create New Lambda Function `lambda-dlr-tf`
+* make sure lambda-dlr-tf.zip bucket region and Lambda function region are the same
 * Amazon S3 link URL - s3://<your_bucket>/<folder>/lambda-dlr-tf.zip
-* Runtime - Custom runtime
+* Runtime - Custom runtime (provide custom bootstrap)
+* Make sure Lambda Execution Role has permissions to download model file from s3
 * Handler - lambda-dlr-tf
 * Memory - 3008MB
 * Timeout - 1 min
@@ -122,6 +125,6 @@ Run Test - you should get the following output
   "model": "/tmp/model.pb",
   "fexists": "True",
   "errC": 0,
-  "inference_time_ms": 478.181
+  "inference_time_ms": 448.181
 }
 ```
